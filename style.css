@@ -1,0 +1,86 @@
+@font-face { font-family: "Geist"; src: url(fonts/geist.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url(fonts/geist-mono.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
+
+:root {
+  --bg: #090b10;
+  --fg: #eceef2;
+  --muted: #8a919d;
+  --glass: rgba(20, 23, 30, 0.55);
+  --edge: rgba(255, 255, 255, 0.09);
+  --edge-top: rgba(255, 255, 255, 0.16);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+  font: 14px/1.4 "Geist", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+#pond { position: fixed; inset: 0; display: block; cursor: crosshair; }
+button { font: inherit; }
+
+/* glass: frosted everywhere, refracting where the browser can run an SVG backdrop filter */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  border-top-color: var(--edge-top);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 40px rgba(0,0,0,0.45);
+  backdrop-filter: blur(14px) saturate(1.5);
+}
+.liquid .glass { backdrop-filter: url(#refract) blur(5px) saturate(1.6); }
+
+#tabs { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px;
+  padding: 4px; border-radius: 999px; z-index: 2; max-width: calc(100vw - 32px); overflow-x: auto; scrollbar-width: none; }
+#tabs button { all: unset; cursor: pointer; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; white-space: nowrap;
+  color: var(--muted); display: flex; align-items: center; gap: 6px; transition: color .15s, background .15s; }
+#tabs button:hover { color: var(--fg); }
+#tabs button[aria-pressed="true"] { background: rgba(255,255,255,0.1); color: var(--fg); box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset; }
+#tabs .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+#tweaksBtn { position: fixed; top: 16px; right: 16px; z-index: 2; cursor: pointer; font-size: 12px; color: var(--muted);
+  border-radius: 999px; padding: 6px 12px; display: flex; align-items: center; gap: 6px; }
+#tweaksBtn:hover { color: var(--fg); }
+#tweaks { position: fixed; top: 54px; right: 16px; z-index: 2; width: 230px; padding: 14px; display: grid; gap: 12px;
+  border-radius: 14px; font-size: 12px; }
+#tweaks[hidden] { display: none; }
+#tweaks label { display: grid; gap: 5px; color: var(--muted); }
+#tweaks input[type=range] { width: 100%; accent-color: #9db8ff; }
+#tweaks input[type=text] { font: inherit; color: var(--fg); background: rgba(0,0,0,0.3);
+  border: 1px solid var(--edge); border-radius: 8px; padding: 5px 8px; }
+
+#center { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px));
+  text-align: center; pointer-events: none; z-index: 1; }
+#clock { font: 500 12px "Geist Mono", ui-monospace, monospace; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 8px; }
+#greet { font-weight: 400; font-size: 30px; letter-spacing: -0.01em; margin: 0 0 20px; text-shadow: 0 2px 20px rgba(0,0,0,0.85); }
+
+#search { pointer-events: auto; text-align: left; border-radius: 20px; padding: 14px 14px 10px; }
+#search:focus-within { border-color: rgba(157,184,255,0.3); }
+#search .field { display: flex; align-items: flex-start; gap: 10px; padding: 2px 4px 0; }
+#search .icon { color: var(--muted); flex: none; margin-top: 2px; }
+#search textarea { flex: 1; resize: none; font: inherit; font-size: 15px; line-height: 22px; color: var(--fg);
+  background: none; border: 0; outline: 0; padding: 0; height: 22px; max-height: 160px; }
+#search textarea::placeholder { color: var(--muted); }
+#search .bar { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+.pill { cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #c6cad2;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--edge); border-radius: 999px; padding: 5px 11px; }
+.pill:hover { color: var(--fg); background: rgba(255,255,255,0.08); }
+.send { cursor: pointer; width: 32px; height: 32px; border-radius: 50%; border: 0; display: grid; place-items: center;
+  color: #cfd3da; background: rgba(255,255,255,0.12); }
+.send:hover { background: rgba(255,255,255,0.2); color: #fff; }
+
+#hint { position: fixed; left: 14px; bottom: 10px; font: 11px "Geist Mono", ui-monospace, monospace;
+  color: rgba(255,255,255,0.28); z-index: 1; pointer-events: none; }
+
+#tweaks footer { display: flex; align-items: center; gap: 8px; padding-top: 10px; margin-top: 2px;
+  border-top: 1px solid var(--edge); font-size: 11.5px; }
+#tweaks footer .gh { display: flex; align-items: center; gap: 6px; color: #c6cad2; text-decoration: none; }
+#tweaks footer .gh:hover { color: var(--fg); }
+#version { color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; }
+#reset { margin-left: auto; cursor: pointer; font-size: 11.5px; color: var(--muted); background: none;
+  border: 1px solid var(--edge); border-radius: 6px; padding: 3px 8px; }
+#reset:hover { color: var(--fg); }
+:focus-visible { outline: 2px solid rgba(157,184,255,0.6); outline-offset: 2px; }
+@media (max-width: 640px) { #greet { font-size: 24px; } #tabs { top: 10px; } #tweaksBtn span { display: none; } }
+
+#who, #whoInput { pointer-events: auto; font: inherit; color: inherit; letter-spacing: inherit; }
+#who { cursor: text; background: none; border: 0; padding: 0; border-bottom: 1px dashed transparent; }
+#who:hover { border-bottom-color: rgba(255,255,255,0.35); }
+#who.unset { color: var(--muted); border-bottom-color: rgba(255,255,255,0.25); }
+#whoInput { background: rgba(255,255,255,0.06); border: 0; border-bottom: 1px solid rgba(157,184,255,0.6);
+  outline: 0; padding: 0 2px; text-align: center; border-radius: 4px 4px 0 0; }
