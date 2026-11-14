@@ -6,7 +6,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('fauna:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('fauna:' + k, JSON.stringify(v)); } catch { /* sin storage */ } },
 };
-const DEFAULTS = { species: 'butterfly', amount: 1, size: 1, speed: 1, detail: 8, name: '', engine: 'google' };
+const DEFAULTS = { species: 'butterfly', amount: 1, size: 1, speed: 1, detail: 8, name: '', engine: 'google', suggest: false };
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) DEFAULTS.speed = 0.4;
 const settings = Object.assign(
   {},
@@ -354,7 +354,7 @@ for (const id of ['amount', 'size', 'speed', 'detail']) {
 }
 $('#name').oninput = (e) => { settings.name = e.target.value.trim(); save(); tick(); };
 $('#reset').onclick = () => {
-  const keep = { species: settings.species, engine: settings.engine };
+  const keep = { species: settings.species, engine: settings.engine, suggest: settings.suggest };
   Object.assign(settings, DEFAULTS, keep); save(); syncControls();
   setCell(); cols = 0; resize(); populate(); tick();
 };
@@ -404,32 +404,166 @@ function editName() {
 
 // search
 const ENGINES = {
-  google: { label: 'Google', url: 'https://www.google.com/search?q=' },
-  bing: { label: 'Bing', url: 'https://www.bing.com/search?q=' },
-  ddg: { label: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+  google: { label: 'Google', url: 'https://www.google.com/search?q=', suggest: (t) => `https://suggestqueries.google.com/complete/search?client=firefox&hl=${LANG}&q=${t}` },
+  bing: { label: 'Bing', url: 'https://www.bing.com/search?q=', suggest: (t) => `https://api.bing.com/osjson.aspx?query=${t}` },
+  ddg: { label: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', suggest: (t) => `https://duckduckgo.com/ac/?type=list&q=${t}` },
 };
+// Optional permissions: asked for only when the user turns suggestions on in Settings.
+const SUGGEST_PERMS = {
+  permissions: ['history'],
+  origins: ['https://suggestqueries.google.com/*', 'https://api.bing.com/*', 'https://duckduckgo.com/*'],
+};
+const hasPermsApi = () => typeof chrome !== 'undefined' && !!chrome.permissions;
 if (!ENGINES[settings.engine]) settings.engine = 'google';
 const engineBtn = $('#engine');
 const showEngine = () => { engineBtn.lastElementChild.textContent = ENGINES[settings.engine].label; };
 engineBtn.onclick = () => {
   const ks = Object.keys(ENGINES);
   settings.engine = ks[(ks.indexOf(settings.engine) + 1) % ks.length];
-  save(); showEngine(); $('#q').focus();
+  save(); showEngine(); q.focus(); refreshSuggestions();
 };
 showEngine();
-const q = $('#q');
+
+const q = $('#q'), list = $('#suggest');
 const fit = () => { q.style.height = 'auto'; q.style.height = Math.min(q.scrollHeight, 160) + 'px'; };
-q.addEventListener('input', fit);
-q.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#search').requestSubmit(); }
-});
-$('#search').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const text = q.value.trim();
+const looksUrl = (t) => !/\s/.test(t) && /^([a-z]+:\/\/)?[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/i.test(t);
+const toUrl = (t) => (/^[a-z]+:\/\//i.test(t) ? t : 'https://' + t);
+
+// recent searches typed here (local only, no permission needed)
+const recent = () => store.get('recent', []);
+function remember(text) {
+  store.set('recent', [text, ...recent().filter((r) => r.toLowerCase() !== text.toLowerCase())].slice(0, 30));
+}
+
+function go(item) {
+  if (item.url) { location.href = item.url; return; }
+  const text = item.text.trim();
   if (!text) return;
-  const looksUrl = !/\s/.test(text) && /^([a-z]+:\/\/)?[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/i.test(text);
-  location.href = looksUrl ? (/^[a-z]+:\/\//i.test(text) ? text : 'https://' + text) : ENGINES[settings.engine].url + encodeURIComponent(text);
+  remember(text);
+  location.href = looksUrl(text) ? toUrl(text) : ENGINES[settings.engine].url + encodeURIComponent(text);
+}
+
+// --- suggestion list ---
+let items = [], active = -1, typed = '', seq = 0, ctrl = null, timer = 0;
+const ICONS = {
+  recent: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
+  page: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+};
+function render() {
+  list.replaceChildren();
+  list.hidden = items.length === 0;
+  q.setAttribute('aria-expanded', String(!list.hidden));
+  items.forEach((it, i) => {
+    const li = document.createElement('li');
+    li.id = 'sg' + i; li.role = 'option'; li.className = it.kind;
+    li.setAttribute('aria-selected', String(i === active));
+    li.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">${ICONS[it.kind]}</svg>`;
+    const main = document.createElement('span'); main.className = 'main';
+    const t = it.title || it.text;
+    const k = t.toLowerCase().indexOf(typed.toLowerCase());
+    if (typed && k >= 0 && !it.url) {           // bold what the user hasn't typed yet, like the omnibox
+      main.append(t.slice(0, k + typed.length));
+      const b = document.createElement('b'); b.textContent = t.slice(k + typed.length); main.append(b);
+    } else main.textContent = t;
+    li.append(main);
+    if (it.url) { const u = document.createElement('span'); u.className = 'url'; u.textContent = it.url.replace(/^https?:\/\/(www\.)?/, ''); li.append(u); }
+    li.onpointerdown = (e) => { e.preventDefault(); go(it); };
+    li.onpointermove = () => { if (active !== i) { active = i; paintActive(); } };
+    list.append(li);
+  });
+  q.setAttribute('aria-activedescendant', active >= 0 ? 'sg' + active : '');
+}
+function paintActive() {
+  [...list.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === active)));
+  q.setAttribute('aria-activedescendant', active >= 0 ? 'sg' + active : '');
+}
+function close() { items = []; active = -1; render(); }
+
+async function refreshSuggestions() {
+  const text = q.value.trim();
+  typed = text;
+  const my = ++seq;
+  const low = text.toLowerCase();
+  const fromRecent = recent()
+    .filter((r) => !text || (r.toLowerCase().startsWith(low) && r.toLowerCase() !== low))
+    .slice(0, text ? 3 : 6)
+    .map((r) => ({ kind: 'recent', text: r }));
+  items = fromRecent; active = -1; render();
+  if (!text || !settings.suggest) return;
+
+  ctrl?.abort(); ctrl = new AbortController();
+  const signal = ctrl.signal;
+  const engine = ENGINES[settings.engine];
+  const [remote, pages] = await Promise.all([
+    fetch(engine.suggest(encodeURIComponent(text)), { signal })
+      .then((r) => (r.ok ? r.json() : null)).then((j) => (Array.isArray(j?.[1]) ? j[1] : [])).catch(() => []),
+    new Promise((res) => {
+      try { chrome.history.search({ text, maxResults: 8, startTime: 0 }, (h) => res(h || [])); } catch { res([]); }
+    }),
+  ]);
+  if (my !== seq) return;                       // a newer keystroke already took over
+  const seen = new Set(fromRecent.map((r) => r.text.toLowerCase()));
+  seen.add(low);                                 // don't suggest exactly what was typed
+  const sugg = remote.filter((t) => typeof t === 'string' && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    .slice(0, 5).map((t) => ({ kind: 'search', text: t }));
+  const hist = pages.filter((p) => p.url && /^https?:/.test(p.url))
+    .sort((a, b) => (b.typedCount - a.typedCount) || (b.visitCount - a.visitCount)).slice(0, 3)
+    .map((p) => ({ kind: 'page', url: p.url, title: p.title || p.url, text: p.title || p.url }));
+  items = [...fromRecent, ...hist, ...sugg].slice(0, 9);
+  render();
+}
+
+q.addEventListener('input', () => {
+  fit();
+  clearTimeout(timer);
+  timer = setTimeout(refreshSuggestions, 90);
 });
+q.addEventListener('focus', () => { if (!items.length) refreshSuggestions(); });
+q.addEventListener('blur', () => setTimeout(close, 120));
+q.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!items.length) return;
+    e.preventDefault();
+    // cycle through the items and back to what was typed (-1)
+    const n = items.length;
+    if (e.key === 'ArrowDown') active = active + 1 >= n ? -1 : active + 1;
+    else active = active <= -1 ? n - 1 : active - 1;
+    q.value = active < 0 ? typed : items[active].url || items[active].text;
+    paintActive(); fit();
+  } else if (e.key === 'Escape' && items.length) {
+    e.preventDefault(); e.stopPropagation(); q.value = typed; close();
+  } else if (e.key === 'Delete' && e.shiftKey && active >= 0 && items[active].kind === 'recent') {
+    e.preventDefault();                         // Shift+Delete removes a recent search, like the omnibox
+    const t = items[active].text.toLowerCase();
+    store.set('recent', recent().filter((r) => r.toLowerCase() !== t));
+    refreshSuggestions();
+  } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    go(active >= 0 ? items[active] : { text: q.value });
+  }
+});
+$('#search').addEventListener('submit', (e) => { e.preventDefault(); go({ text: q.value }); });
+
+// Settings toggle for engine suggestions + history (asks for the optional permissions)
+const toggle = $('#suggestToggle');
+async function syncSuggestToggle() {
+  if (!hasPermsApi()) { toggle.closest('label').hidden = true; settings.suggest = false; return; }
+  const granted = await chrome.permissions.contains(SUGGEST_PERMS).catch(() => false);
+  if (!granted) settings.suggest = false;
+  toggle.checked = !!settings.suggest;
+}
+toggle.onchange = async () => {
+  if (toggle.checked) {
+    const ok = await chrome.permissions.request(SUGGEST_PERMS).catch(() => false);
+    settings.suggest = !!ok; toggle.checked = !!ok;
+  } else {
+    settings.suggest = false;
+    chrome.permissions.remove(SUGGEST_PERMS).catch(() => {});
+  }
+  save();
+};
+syncSuggestToggle();
 
 // Update check: unpacked extensions can't update themselves, so once a day ask GitHub for the
 // latest release and, if it is newer, show a link to it in Settings (and a dot on the button).

@@ -45,7 +45,8 @@ button { font: inherit; }
 #tweaks input[type=text] { width: 100%; min-width: 0; font: inherit; color: var(--fg); background: rgba(0,0,0,0.3);
   border: 1px solid var(--edge); border-radius: 8px; padding: 5px 8px; }
 
-#center { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px));
+/* anchored at its top so the suggestion list grows downward without moving the greeting */
+#center { position: fixed; left: 50%; top: calc(42% - 95px); transform: translateX(-50%); width: min(560px, calc(100vw - 32px));
   text-align: center; pointer-events: none; z-index: 1; }
 #clock { font: 500 12px "Geist Mono", ui-monospace, monospace; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 8px; }
 #greet { font-weight: 400; font-size: 30px; letter-spacing: -0.01em; margin: 0 0 20px; text-shadow: 0 2px 20px rgba(0,0,0,0.85); }
@@ -94,3 +95,20 @@ button { font: inherit; }
 #tweaksBtn { position: fixed; }
 #tweaksBtn.has-update::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px;
   border-radius: 50%; background: #9db8ff; box-shadow: 0 0 0 2px #0d1017; }
+
+/* suggestions */
+#suggest { list-style: none; margin: 10px -6px 0; padding: 6px 0 0; border-top: 1px solid var(--edge); max-height: 330px; overflow-y: auto; }
+#suggest[hidden] { display: none; }
+#suggest li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; cursor: pointer;
+  color: #c9cdd5; font-size: 14px; min-width: 0; }
+#suggest li svg { flex: none; color: var(--muted); }
+#suggest li .main { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#suggest li .main b { font-weight: 600; color: var(--fg); }
+#suggest li .url { margin-left: auto; padding-left: 12px; color: #7fa3ff; font-size: 12px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 45%; flex-shrink: 1; }
+#suggest li[aria-selected="true"] { background: rgba(255,255,255,0.08); color: var(--fg); }
+#suggest li.recent svg { color: #9db8ff; }
+#tweaks label.check { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; color: var(--fg); cursor: pointer; }
+#tweaks label.check input { margin: 2px 0 0; accent-color: #9db8ff; width: 14px; height: 14px; }
+#tweaks label.check small { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; margin-top: 2px; }
+#tweaks label[hidden] { display: none; }
