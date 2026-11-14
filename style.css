@@ -36,12 +36,13 @@ button { font: inherit; }
 #tweaksBtn { position: fixed; top: 16px; right: 16px; z-index: 2; cursor: pointer; font-size: 12px; color: var(--muted);
   border-radius: 999px; padding: 6px 12px; display: flex; align-items: center; gap: 6px; }
 #tweaksBtn:hover { color: var(--fg); }
-#tweaks { position: fixed; top: 54px; right: 16px; z-index: 2; width: 230px; padding: 14px; display: grid; gap: 12px;
+#tweaks { position: fixed; top: 54px; right: 16px; z-index: 2; width: 240px; max-width: calc(100vw - 32px); padding: 14px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
   border-radius: 14px; font-size: 12px; }
 #tweaks[hidden] { display: none; }
-#tweaks label { display: grid; gap: 5px; color: var(--muted); }
-#tweaks input[type=range] { width: 100%; accent-color: #9db8ff; }
-#tweaks input[type=text] { font: inherit; color: var(--fg); background: rgba(0,0,0,0.3);
+#tweaks label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; color: var(--muted); }
+#tweaks input[type=range] { width: 100%; min-width: 0; margin: 0; accent-color: #9db8ff; }
+#tweaks input[type=text] { width: 100%; min-width: 0; font: inherit; color: var(--fg); background: rgba(0,0,0,0.3);
   border: 1px solid var(--edge); border-radius: 8px; padding: 5px 8px; }
 
 #center { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px));
@@ -72,7 +73,7 @@ button { font: inherit; }
 #tweaks footer .gh { display: flex; align-items: center; gap: 6px; color: #c6cad2; text-decoration: none; }
 #tweaks footer .gh:hover { color: var(--fg); }
 #version { color: var(--muted); font-family: "Geist Mono", ui-monospace, monospace; }
-#reset { margin-left: auto; cursor: pointer; font-size: 11.5px; color: var(--muted); background: none;
+#reset { margin-left: auto; white-space: nowrap; cursor: pointer; font-size: 11.5px; color: var(--muted); background: none;
   border: 1px solid var(--edge); border-radius: 6px; padding: 3px 8px; }
 #reset:hover { color: var(--fg); }
 :focus-visible { outline: 2px solid rgba(157,184,255,0.6); outline-offset: 2px; }
@@ -84,3 +85,12 @@ button { font: inherit; }
 #who.unset { color: var(--muted); border-bottom-color: rgba(255,255,255,0.25); }
 #whoInput { background: rgba(255,255,255,0.06); border: 0; border-bottom: 1px solid rgba(157,184,255,0.6);
   outline: 0; padding: 0 2px; text-align: center; border-radius: 4px 4px 0 0; }
+
+#tweaks footer { flex-wrap: wrap; }
+#update { flex-basis: 100%; order: 3; text-align: center; font-size: 12px; color: #0b1020; background: #9db8ff;
+  border-radius: 8px; padding: 6px 8px; text-decoration: none; font-weight: 500; }
+#update[hidden] { display: none; }
+#update:hover { background: #b8ccff; }
+#tweaksBtn { position: fixed; }
+#tweaksBtn.has-update::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px;
+  border-radius: 50%; background: #9db8ff; box-shadow: 0 0 0 2px #0d1017; }

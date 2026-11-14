@@ -290,6 +290,8 @@ function frame(now) {
   draw(dt);
   if (PERF) { perfAcc += performance.now() - t0; if (++perfN === 60) { console.log(`draw ${(perfAcc / 60).toFixed(2)} ms/frame, ${cols}x${rows} cells`); perfAcc = perfN = 0; } }
   requestAnimationFrame(frame);
+checkUpdate();
+if (params.has('settings')) openPanel(true);
 }
 
 // ---------- interaction ----------
@@ -429,6 +431,34 @@ $('#search').addEventListener('submit', (e) => {
   location.href = looksUrl ? (/^[a-z]+:\/\//i.test(text) ? text : 'https://' + text) : ENGINES[settings.engine].url + encodeURIComponent(text);
 });
 
+// Update check: unpacked extensions can't update themselves, so once a day ask GitHub for the
+// latest release and, if it is newer, show a link to it in Settings (and a dot on the button).
+const REPO = 'lujangrego99/ascii-fauna';
+const newer = (a, b) => {
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
+async function checkUpdate() {
+  let current;
+  try { current = chrome.runtime.getManifest().version; } catch { return; }
+  let info = store.get('update', null);
+  if (!info || Date.now() - info.at > 24 * 3600e3) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
+      if (!r.ok) return;
+      const j = await r.json();
+      info = { at: Date.now(), tag: j.tag_name, url: j.html_url };
+      store.set('update', info);
+    } catch { return; }
+  }
+  const latest = String(info.tag || '').replace(/^v/, '');
+  if (!latest || !newer(latest, current)) return;
+  const a = $('#update');
+  a.href = info.url; a.textContent = T.update('v' + latest); a.title = T.updateHint; a.hidden = false;
+  panelBtn.classList.add('has-update');
+}
+
 // Only Chromium refracts through an SVG filter inside backdrop-filter; others keep frosted glass.
 if (/Chrome\//.test(navigator.userAgent)) document.documentElement.classList.add('liquid');
 
@@ -440,3 +470,5 @@ setSpecies(settings.species);
 tick(); setInterval(tick, 15000);
 document.fonts.load('600 11px "Geist Mono"').then(setFont, () => {});
 requestAnimationFrame(frame);
+checkUpdate();
+if (params.has('settings')) openPanel(true);

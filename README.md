@@ -42,11 +42,16 @@ Works in Microsoft Edge, Google Chrome, Brave, Vivaldi, Arc and any other Chromi
 4. Click **Load unpacked** and choose the folder that contains `manifest.json`.
 5. Open a new tab. If the browser asks whether to keep the new tab page, choose **Keep changes**.
 
-To update, replace the folder with the new version and press the reload button on the extension card.
+### Updating
+
+Browsers only update extensions installed from a store, so an unpacked one can't update itself. Instead, once a day ASCII Fauna checks GitHub for a newer release; when there is one, **Settings** shows a dot and an **Update** button that opens the download.
+
+- **Installed from the zip:** download the new zip, replace the folder, and press the reload button on the extension card.
+- **Installed with `git clone`:** run `git pull` in the folder and press reload.
 
 ## Privacy
 
-No permissions, no network requests, no tracking. Fonts are bundled. Your settings and name are stored only in the browser's local storage for this extension. Searches go straight to the engine you pick.
+No permissions and no tracking. Fonts are bundled. Your settings and name are stored only in the browser's local storage for this extension. Searches go straight to the engine you pick. The only request the extension makes on its own is a daily check of this repository's latest release on `api.github.com`, to tell you when there is an update.
 
 ## How it works
 
@@ -76,4 +81,4 @@ Fonts: [Geist and Geist Mono](https://github.com/vercel/geist-font), SIL Open Fo
 
 **Instalación (Edge, Chrome, Brave…):** bajá el `.zip` del [último release](https://github.com/lujangrego99/ascii-fauna/releases/latest) y descomprimilo, abrí `edge://extensions` (o `chrome://extensions`), activá **Modo de desarrollador**, tocá **Cargar desempaquetada** y elegí la carpeta. Abrí una pestaña nueva y, si el navegador pregunta, elegí **Conservar cambios**.
 
-Tocá el nombre del saludo para poner el tuyo, usá `1`–`7` para cambiar de animal y **Ajustes** para la resolución, cantidad, tamaño y velocidad. No pide permisos ni manda datos a ningún lado.
+Tocá el nombre del saludo para poner el tuyo, usá `1`–`7` para cambiar de animal y **Ajustes** para la resolución, cantidad, tamaño y velocidad. No pide permisos ni manda datos: lo único que consulta, una vez por día, es si hay una versión nueva en GitHub. Cuando la hay, **Ajustes** muestra un punto y un botón **Actualizar** que abre la descarga (bajás el zip, reemplazás la carpeta y recargás la extensión; si la instalaste con `git clone`, alcanza con `git pull` y recargar).
