@@ -28,7 +28,7 @@ Butterfly, koi, jellyfish, dragonfly, frog, crane and crab. Each one is drawn li
 | **`1` – `7`** | Switch animal. |
 | **Your name** | Click the name in the greeting to type yours. Enter saves, Esc cancels. |
 | **Search** | Type a search or a web address. The pill below switches between Google, Bing and DuckDuckGo. |
-| **Suggestions** | Works like the address bar: it completes sites you visit as you type (`yout` → `youtube.com`, Tab or Enter to accept, Backspace or Esc to undo), the first row is always what Enter does, and the list mixes your previous searches (from the whole browser), pages from your history and predictions from your engine. Turn on **Suggestions and history** in Settings — the browser asks for permission once. Without it you still get the searches typed in this box. |
+| **Suggestions** | Works like the address bar: it completes sites you visit as you type (`yout` → `youtube.com`, Tab or Enter to accept, Backspace or Esc to undo), the first row is always what Enter does, and the list mixes your previous searches (from the whole browser), pages from your history and predictions from your engine. On by default; turn off **Suggestions and history** in Settings if you prefer. |
 | **Settings** | Resolution (cell size), amount, size and speed of the animals. |
 
 The greeting follows the time of day, and the interface is in Spanish or English depending on your browser.
@@ -52,7 +52,7 @@ Browsers only update extensions installed from a store, so an unpacked one can't
 
 ## Privacy
 
-No tracking, and no permissions unless you turn on suggestions (then: history, plus the suggestion endpoint of Google, Bing or DuckDuckGo — your typing goes to the engine you picked, as it does in the address bar). Fonts are bundled. Your settings and name are stored only in the browser's local storage for this extension. Searches go straight to the engine you pick. The only request the extension makes on its own is a daily check of this repository's latest release on `api.github.com`, to tell you when there is an update.
+No tracking. The extension asks for two permissions, both for the address-bar-style suggestions: **history** (read locally to complete sites and show your previous searches; nothing leaves your computer) and the suggestion endpoints of Google, Bing and DuckDuckGo (what you type goes to the engine you picked, as it does in the address bar). Turn suggestions off in Settings and neither is used. Fonts are bundled. Your settings and name are stored only in the browser's local storage for this extension. Searches go straight to the engine you pick. The only request the extension makes on its own is a daily check of this repository's latest release on `api.github.com`, to tell you when there is an update.
 
 ## How it works
 
@@ -82,4 +82,4 @@ Fonts: [Geist and Geist Mono](https://github.com/vercel/geist-font), SIL Open Fo
 
 **Instalación (Edge, Chrome, Brave…):** bajá el `.zip` del [último release](https://github.com/lujangrego99/ascii-fauna/releases/latest) y descomprimilo, abrí `edge://extensions` (o `chrome://extensions`), activá **Modo de desarrollador**, tocá **Cargar desempaquetada** y elegí la carpeta. Abrí una pestaña nueva y, si el navegador pregunta, elegí **Conservar cambios**.
 
-Tocá el nombre del saludo para poner el tuyo, usá `1`–`7` para cambiar de animal y **Ajustes** para la resolución, cantidad, tamaño y velocidad. Mientras escribís en la barra aparecen tus búsquedas previas; si activás **Sugerencias e historial** en Ajustes (Edge pide permiso una vez) también salen las predicciones del buscador y páginas de tu historial, como en la barra de arriba. No rastrea nada; lo único que consulta por su cuenta, una vez por día, es si hay una versión nueva en GitHub. Cuando la hay, **Ajustes** muestra un punto y un botón **Actualizar** que abre la descarga (bajás el zip, reemplazás la carpeta y recargás la extensión; si la instalaste con `git clone`, alcanza con `git pull` y recargar).
+Tocá el nombre del saludo para poner el tuyo, usá `1`–`7` para cambiar de animal y **Ajustes** para la resolución, cantidad, tamaño y velocidad. La barra funciona como la de direcciones: completa sitios que visitás, muestra tus búsquedas previas, páginas del historial y predicciones del buscador (viene activado; se apaga en **Ajustes → Sugerencias e historial**). Por eso al instalarla el navegador avisa que puede leer el historial: se usa solo localmente. No rastrea nada; lo único que consulta por su cuenta, una vez por día, es si hay una versión nueva en GitHub. Cuando la hay, **Ajustes** muestra un punto y un botón **Actualizar** que abre la descarga (bajás el zip, reemplazás la carpeta y recargás la extensión; si la instalaste con `git clone`, alcanza con `git pull` y recargar).

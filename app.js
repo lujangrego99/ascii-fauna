@@ -6,13 +6,15 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('fauna:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('fauna:' + k, JSON.stringify(v)); } catch { /* sin storage */ } },
 };
-const DEFAULTS = { species: 'butterfly', amount: 1, size: 1, speed: 1, detail: 8, name: '', engine: 'google', suggest: false };
+const DEFAULTS = { species: 'butterfly', amount: 1, size: 1, speed: 1, detail: 8, name: '', engine: 'google', suggest: true, v: 2 };
 if (matchMedia('(prefers-reduced-motion: reduce)').matches) DEFAULTS.speed = 0.4;
 const settings = Object.assign(
   {},
   DEFAULTS,
   store.get('settings', {}),
 );
+// settings saved before v2 had suggestions off by default: turn them on once
+if ((settings.v || 1) < 2) { settings.suggest = true; settings.v = 2; }
 // ?animal=koi (or ?s=koi) opens on that animal
 const params = new URLSearchParams(location.search);
 const forced = params.get('animal') || params.get('s');
@@ -408,7 +410,7 @@ const ENGINES = {
   bing: { label: 'Bing', url: 'https://www.bing.com/search?q=', suggest: (t) => `https://api.bing.com/osjson.aspx?query=${t}` },
   ddg: { label: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', suggest: (t) => `https://duckduckgo.com/ac/?type=list&q=${t}` },
 };
-// Optional permissions: asked for only when the user turns suggestions on in Settings.
+// Permissions for suggestions (declared in the manifest; the Settings toggle only turns the feature off/on).
 const SUGGEST_PERMS = {
   permissions: ['history'],
   origins: ['https://suggestqueries.google.com/*', 'https://api.bing.com/*', 'https://duckduckgo.com/*'],
@@ -687,7 +689,6 @@ toggle.onchange = async () => {
     hist = null; histLoading = null; if (ok) loadHistory();
   } else {
     settings.suggest = false; hist = null; histLoading = null;
-    chrome.permissions.remove(SUGGEST_PERMS).catch(() => {});
   }
   save();
 };
