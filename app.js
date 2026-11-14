@@ -429,22 +429,74 @@ const fit = () => { q.style.height = 'auto'; q.style.height = Math.min(q.scrollH
 const looksUrl = (t) => !/\s/.test(t) && /^([a-z]+:\/\/)?[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/i.test(t);
 const toUrl = (t) => (/^[a-z]+:\/\//i.test(t) ? t : 'https://' + t);
 
-// recent searches typed here (local only, no permission needed)
+// ---------------------------------------------------------------------------------------------
+// Suggestions that behave like the browser's address bar:
+//  - inline autocomplete of sites you visit or typed before ("yout" → "youtube.com", rest selected)
+//  - first row is always what Enter will do; ↑ ↓ move, Esc undoes the completion then closes
+//  - previous searches from the whole browser (search-engine URLs in history) plus the ones typed here
+//  - most visited sites when the box is empty, history pages ranked by typed/visit count and recency
+//  - predictions from the chosen engine, fetched after a short pause
+// Everything except the local recent searches needs the optional "history" + suggest permissions.
+// ---------------------------------------------------------------------------------------------
 const recent = () => store.get('recent', []);
 function remember(text) {
   store.set('recent', [text, ...recent().filter((r) => r.toLowerCase() !== text.toLowerCase())].slice(0, 30));
 }
+const strip = (u) => u.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+const DAY = 864e5;
+const frecency = (x) => ((x.typed || 0) * 20 + (x.visits || 0) + 1) / (1 + (Date.now() - (x.at || 0)) / (14 * DAY));
+
+// A search-engine results URL → the query that was searched.
+function queryOf(url) {
+  try {
+    const u = new URL(url), h = u.hostname;
+    const engine = /(^|\.)(google|bing|duckduckgo|ecosia|yahoo|startpage|qwant)\.[a-z.]+$/i.test(h) || h === 'search.brave.com';
+    if (!engine) return null;
+    if (!/duckduckgo/.test(h) && !/\/search|\/web/.test(u.pathname)) return null;
+    const t = u.searchParams.get('q') || u.searchParams.get('p') || u.searchParams.get('query');
+    return t && t.trim() ? t.trim() : null;
+  } catch { return null; }
+}
+
+let hist = null, histLoading = null;
+function loadHistory() {
+  if (!settings.suggest) return Promise.resolve();
+  if (hist) return Promise.resolve();
+  return (histLoading ||= new Promise((res) => {
+    try { chrome.history.search({ text: '', maxResults: 5000, startTime: Date.now() - 180 * DAY }, (h) => res(h || [])); } catch { res([]); }
+  }).then((raw) => {
+    const pages = [], searches = new Map(), hosts = new Map();
+    for (const p of raw) {
+      if (!/^https?:/i.test(p.url)) continue;
+      const at = p.lastVisitTime || 0, visits = p.visitCount || 0, typed = p.typedCount || 0;
+      const qy = queryOf(p.url);
+      if (qy) {
+        const k = qy.toLowerCase(), cur = searches.get(k);
+        if (cur) { cur.visits += visits; cur.at = Math.max(cur.at, at); } else searches.set(k, { text: qy, visits, at });
+        continue;
+      }
+      let u; try { u = new URL(p.url); } catch { continue; }
+      const host = u.hostname.replace(/^www\./, '').toLowerCase();
+      pages.push({ url: p.url, title: p.title || '', typed, visits, at, s: strip(p.url).toLowerCase(), t: (p.title || '').toLowerCase() });
+      const hc = hosts.get(host) || { url: u.origin + '/', s: host, title: '', typed: 0, visits: 0, at: 0 };
+      hc.typed += typed; hc.visits += visits; hc.at = Math.max(hc.at, at);
+      if ((u.pathname === '/' && p.title) || !hc.title) hc.title = p.title || host;
+      hosts.set(host, hc);
+    }
+    hist = { pages, searches: [...searches.values()], hosts: [...hosts.values()] };
+  }));
+}
 
 function go(item) {
   if (item.url) { location.href = item.url; return; }
-  const text = item.text.trim();
+  const text = (item.text || '').trim();
   if (!text) return;
   remember(text);
   location.href = looksUrl(text) ? toUrl(text) : ENGINES[settings.engine].url + encodeURIComponent(text);
 }
 
-// --- suggestion list ---
-let items = [], active = -1, typed = '', seq = 0, ctrl = null, timer = 0;
+// --- list state ---
+let items = [], active = -1, typed = '', seq = 0, ctrl = null, timer = 0, inlineFor = '';
 const ICONS = {
   recent: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
@@ -461,13 +513,17 @@ function render() {
     li.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">${ICONS[it.kind]}</svg>`;
     const main = document.createElement('span'); main.className = 'main';
     const t = it.title || it.text;
-    const k = t.toLowerCase().indexOf(typed.toLowerCase());
-    if (typed && k >= 0 && !it.url) {           // bold what the user hasn't typed yet, like the omnibox
-      main.append(t.slice(0, k + typed.length));
-      const b = document.createElement('b'); b.textContent = t.slice(k + typed.length); main.append(b);
+    const k = typed ? t.toLowerCase().indexOf(typed.toLowerCase()) : -1;
+    if (!it.row && k === 0 && !it.url) {        // bold what the user hasn't typed yet
+      main.append(t.slice(0, typed.length));
+      const b = document.createElement('b'); b.textContent = t.slice(typed.length); main.append(b);
     } else main.textContent = t;
     li.append(main);
-    if (it.url) { const u = document.createElement('span'); u.className = 'url'; u.textContent = it.url.replace(/^https?:\/\/(www\.)?/, ''); li.append(u); }
+    const side = it.row === 'search' ? `— ${T.searchWith(ENGINES[settings.engine].label)}`
+      : it.row === 'url' ? `— ${T.open}` : it.url ? strip(it.url).replace(/\/$/, '') : '';
+    if (side && !(it.url && strip(it.url).replace(/\/$/, '') === t)) {
+      const u = document.createElement('span'); u.className = it.row ? 'hint' : 'url'; u.textContent = side; li.append(u);
+    }
     li.onpointerdown = (e) => { e.preventDefault(); go(it); };
     li.onpointermove = () => { if (active !== i) { active = i; paintActive(); } };
     list.append(li);
@@ -480,67 +536,138 @@ function paintActive() {
 }
 function close() { items = []; active = -1; render(); }
 
-async function refreshSuggestions() {
-  const text = q.value.trim();
-  typed = text;
-  const my = ++seq;
-  const low = text.toLowerCase();
-  const fromRecent = recent()
-    .filter((r) => !text || (r.toLowerCase().startsWith(low) && r.toLowerCase() !== low))
-    .slice(0, text ? 3 : 6)
-    .map((r) => ({ kind: 'recent', text: r }));
-  items = fromRecent; active = -1; render();
-  if (!text || !settings.suggest) return;
+// What was typed, ignoring an inline completion that is currently selected.
+function typedText() {
+  const v = q.value;
+  return q.selectionStart < q.selectionEnd && q.selectionEnd === v.length && inlineFor ? v.slice(0, q.selectionStart) : v;
+}
 
-  ctrl?.abort(); ctrl = new AbortController();
-  const signal = ctrl.signal;
-  const engine = ENGINES[settings.engine];
-  const [remote, pages] = await Promise.all([
-    fetch(engine.suggest(encodeURIComponent(text)), { signal })
-      .then((r) => (r.ok ? r.json() : null)).then((j) => (Array.isArray(j?.[1]) ? j[1] : [])).catch(() => []),
-    new Promise((res) => {
-      try { chrome.history.search({ text, maxResults: 8, startTime: 0 }, (h) => res(h || [])); } catch { res([]); }
-    }),
-  ]);
-  if (my !== seq) return;                       // a newer keystroke already took over
-  const seen = new Set(fromRecent.map((r) => r.text.toLowerCase()));
-  seen.add(low);                                 // don't suggest exactly what was typed
-  const sugg = remote.filter((t) => typeof t === 'string' && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
-    .slice(0, 5).map((t) => ({ kind: 'search', text: t }));
-  const hist = pages.filter((p) => p.url && /^https?:/.test(p.url))
-    .sort((a, b) => (b.typedCount - a.typedCount) || (b.visitCount - a.visitCount)).slice(0, 3)
-    .map((p) => ({ kind: 'page', url: p.url, title: p.title || p.url, text: p.title || p.url }));
-  items = [...fromRecent, ...hist, ...sugg].slice(0, 9);
+// Local part: instant on every keystroke (history is cached in memory).
+function compute(allowInline) {
+  const raw = typedText(), text = raw.trim(), low = text.toLowerCase();
+  typed = text;
+  const local = recent();
+  if (!low) {
+    const sites = hist ? [...hist.hosts].filter((h) => h.visits >= 2).sort((a, b) => frecency(b) - frecency(a)).slice(0, 5) : [];
+    items = [
+      ...local.slice(0, 4).map((r) => ({ kind: 'recent', text: r })),
+      ...sites.map((h) => ({ kind: 'page', url: h.url, title: h.title || h.s })),
+    ];
+    active = -1; inlineFor = ''; render();
+    return;
+  }
+
+  // inline candidate: a site or page whose address starts with what was typed
+  let inline = null;
+  if (hist && !/\s/.test(low)) {
+    const pool = [
+      ...hist.hosts.filter((h) => h.s.startsWith(low) && (h.typed > 0 || h.visits >= 2)),
+      ...hist.pages.filter((p) => p.s.startsWith(low) && (p.typed > 0 || p.visits >= 3)),
+    ];
+    inline = pool.sort((a, b) => frecency(b) - frecency(a))[0] || null;
+  }
+
+  // previous searches: typed here first, then from the whole browser
+  const seen = new Set([low]);
+  const past = [];
+  for (const r of local) if (r.toLowerCase().startsWith(low) && !seen.has(r.toLowerCase())) { seen.add(r.toLowerCase()); past.push({ kind: 'recent', text: r }); }
+  if (hist) {
+    hist.searches.filter((x) => x.text.toLowerCase().startsWith(low) || (low.length >= 3 && x.text.toLowerCase().includes(' ' + low)))
+      .sort((a, b) => frecency(b) - frecency(a))
+      .forEach((x) => { const k = x.text.toLowerCase(); if (!seen.has(k)) { seen.add(k); past.push({ kind: 'recent', text: x.text }); } });
+  }
+
+  // history pages
+  let pages = [];
+  if (hist) {
+    const wordStart = (str) => str.split(/[^a-z0-9áéíóúñü]+/i).some((w) => w.startsWith(low));
+    pages = hist.pages.map((p) => {
+      const m = p.s.startsWith(low) ? 3 : wordStart(p.s) ? 1.6 : wordStart(p.t) ? 1.3 : (low.length >= 3 && p.t.includes(low)) ? 0.5 : 0;
+      return m ? { p, score: m * frecency(p) } : null;
+    }).filter(Boolean).sort((a, b) => b.score - a.score).map((x) => x.p)
+      .filter((p) => !inline || p.url !== inline.url).slice(0, 3)
+      .map((p) => ({ kind: 'page', url: p.url, title: p.title || strip(p.url) }));
+  }
+
+  // the completion is only applied while typing forward; after a deletion the site moves to second place
+  inlineFor = '';
+  const apply = allowInline && inline && raw === q.value && raw.toLowerCase() === low && inline.s.length > low.length;
+  if (apply) {
+    q.value = raw + inline.s.slice(raw.length);
+    q.setSelectionRange(raw.length, q.value.length);
+    inlineFor = raw;
+  }
+  const isUrl = looksUrl(text);
+  const searchRow = { kind: 'search', text, row: 'search' };
+  const site = inline && { kind: 'page', url: inline.url, title: inline.title || inline.s, inline: inline.s };
+  const head = apply ? [site, searchRow]
+    : isUrl ? [{ kind: 'page', url: toUrl(text), title: text, row: 'url' }, searchRow, ...(site ? [site] : [])]
+    : [searchRow, ...(site ? [site] : [])];
+  items = [...head, ...past.slice(0, 3), ...pages];
+  active = 0;
   render();
 }
 
-q.addEventListener('input', () => {
+// Remote part: predictions from the engine, merged when they arrive.
+async function fetchRemote() {
+  const text = typed, my = ++seq;
+  if (!text || !settings.suggest) return;
+  ctrl?.abort(); ctrl = new AbortController();
+  const remote = await fetch(ENGINES[settings.engine].suggest(encodeURIComponent(text)), { signal: ctrl.signal })
+    .then((r) => (r.ok ? r.json() : null)).then((j) => (Array.isArray(j?.[1]) ? j[1] : [])).catch(() => []);
+  if (my !== seq || text !== typed) return;     // a newer keystroke already took over
+  const seen = new Set(items.map((it) => (it.text || '').toLowerCase()));
+  const extra = remote.filter((t) => typeof t === 'string' && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    .map((t) => ({ kind: 'search', text: t }));
+  items = [...items, ...extra].slice(0, 9);
+  render();
+}
+function refreshSuggestions() {
+  compute(false);
+  clearTimeout(timer); timer = setTimeout(fetchRemote, 120);
+}
+
+q.addEventListener('input', (e) => {
   fit();
-  clearTimeout(timer);
-  timer = setTimeout(refreshSuggestions, 90);
+  const forward = e.inputType === 'insertText' || e.inputType === 'insertCompositionText';
+  compute(forward);
+  clearTimeout(timer); timer = setTimeout(fetchRemote, 120);
 });
-q.addEventListener('focus', () => { if (!items.length) refreshSuggestions(); });
+// like the address bar: the list opens on click or typing, not on the automatic focus of a new tab
+q.addEventListener('focus', () => { loadHistory(); });
+q.addEventListener('pointerdown', () => { loadHistory().then(() => { if (!items.length) compute(false); }); });
 q.addEventListener('blur', () => setTimeout(close, 120));
 q.addEventListener('keydown', (e) => {
+  if (e.isComposing) return;
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     if (!items.length) return;
     e.preventDefault();
-    // cycle through the items and back to what was typed (-1)
     const n = items.length;
-    if (e.key === 'ArrowDown') active = active + 1 >= n ? -1 : active + 1;
-    else active = active <= -1 ? n - 1 : active - 1;
-    q.value = active < 0 ? typed : items[active].url || items[active].text;
+    if (e.key === 'ArrowDown') active = active + 1 >= n ? 0 : active + 1;
+    else active = active <= 0 ? n - 1 : active - 1;
+    const it = items[active];
+    q.value = it.row ? typed : it.url ? strip(it.url).replace(/\/$/, '') : it.text;
+    inlineFor = '';
     paintActive(); fit();
-  } else if (e.key === 'Escape' && items.length) {
-    e.preventDefault(); e.stopPropagation(); q.value = typed; close();
+  } else if (e.key === 'Tab' && !e.shiftKey && inlineFor && q.selectionStart < q.selectionEnd) {
+    e.preventDefault();                         // accept the inline completion
+    q.setSelectionRange(q.value.length, q.value.length);
+    inlineFor = ''; typed = q.value.trim();
+  } else if (e.key === 'Escape') {
+    if (q.value !== typed && typed) {           // first Esc: undo completion / arrowing
+      e.preventDefault(); e.stopPropagation();
+      q.value = typed; inlineFor = ''; compute(false);
+    } else if (items.length) { e.preventDefault(); e.stopPropagation(); close(); }
   } else if (e.key === 'Delete' && e.shiftKey && active >= 0 && items[active].kind === 'recent') {
-    e.preventDefault();                         // Shift+Delete removes a recent search, like the omnibox
+    e.preventDefault();                         // Shift+Delete forgets a search typed here
     const t = items[active].text.toLowerCase();
     store.set('recent', recent().filter((r) => r.toLowerCase() !== t));
-    refreshSuggestions();
-  } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    q.value = typed; compute(false);
+  } else if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    go(active >= 0 ? items[active] : { text: q.value });
+    const it = items[active];
+    if (it && !it.row) go(it);
+    else go({ text: active >= 0 && it?.row ? typed : q.value });
   }
 });
 $('#search').addEventListener('submit', (e) => { e.preventDefault(); go({ text: q.value }); });
@@ -557,13 +684,14 @@ toggle.onchange = async () => {
   if (toggle.checked) {
     const ok = await chrome.permissions.request(SUGGEST_PERMS).catch(() => false);
     settings.suggest = !!ok; toggle.checked = !!ok;
+    hist = null; histLoading = null; if (ok) loadHistory();
   } else {
-    settings.suggest = false;
+    settings.suggest = false; hist = null; histLoading = null;
     chrome.permissions.remove(SUGGEST_PERMS).catch(() => {});
   }
   save();
 };
-syncSuggestToggle();
+syncSuggestToggle().then(() => loadHistory());
 
 // Update check: unpacked extensions can't update themselves, so once a day ask GitHub for the
 // latest release and, if it is newer, show a link to it in Settings (and a dot on the button).

@@ -28,7 +28,7 @@ Butterfly, koi, jellyfish, dragonfly, frog, crane and crab. Each one is drawn li
 | **`1` – `7`** | Switch animal. |
 | **Your name** | Click the name in the greeting to type yours. Enter saves, Esc cancels. |
 | **Search** | Type a search or a web address. The pill below switches between Google, Bing and DuckDuckGo. |
-| **Suggestions** | Your recent searches show up as you type (↑ ↓ to pick, Shift+Delete to forget one). Turn on **Suggestions and history** in Settings to also get predictions from your engine and matching pages from your history — the browser asks for permission once. |
+| **Suggestions** | Works like the address bar: it completes sites you visit as you type (`yout` → `youtube.com`, Tab or Enter to accept, Backspace or Esc to undo), the first row is always what Enter does, and the list mixes your previous searches (from the whole browser), pages from your history and predictions from your engine. Turn on **Suggestions and history** in Settings — the browser asks for permission once. Without it you still get the searches typed in this box. |
 | **Settings** | Resolution (cell size), amount, size and speed of the animals. |
 
 The greeting follows the time of day, and the interface is in Spanish or English depending on your browser.
